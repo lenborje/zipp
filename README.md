@@ -1,6 +1,8 @@
 # Zipp
 The purpose of this project is to illustrate how to combine Java Stream parallelism with the jar FileSystem.
 
+To let the code do something useful, too, it implements a simple "zip" utility that can pack files in parallel.
+
 
 ## Build
 Zipp builds with Java 8 or later.
