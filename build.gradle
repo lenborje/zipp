@@ -3,9 +3,17 @@ plugins {
     id 'application'
 }
 
+repositories {
+    mavenCentral()
+}
+
 mainClassName = "lb.zipp.Zipp"
 
 applicationName = 'zipp'
+
+dependencies {
+    implementation group: 'com.thedeanda', name: 'lorem', version:2.1
+}
 
 //applicationDefaultJvmArgs = ["-Duser.language=en"]
 
@@ -21,16 +29,9 @@ allprojects {
         //enabled = false
     }
 
+    //noinspection GrUnresolvedAccess
     if (!it.tasks.findByName('wrapper')) {
         task wrapper(type: Wrapper) {
         }
-    }
-}
-
-
-jar {
-    archiveName "${applicationName}.jar"
-    manifest {
-        attributes << (["Main-Class":mainClassName])
     }
 }

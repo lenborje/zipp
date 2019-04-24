@@ -16,26 +16,37 @@ public enum Option {
      * Requests that all file additions should be executed in parallel.
      */
     PARALLEL,
+
     /**
      * Requests that any directory specified as input should be
      * recursively traversed and all files found added individually to the
      * Zip archive. Paths will be preserved.
      */
-    RECURSIVE;
+    RECURSIVE,
+
+    /**
+     * Prints test timings.
+     */
+    TEST,
+
+    /**
+     * Creates a number of temporary test files which are then added to the target archive.
+     */
+    GENERATE;
 
     /**
      * Maps names to options
      */
     private static final Map<String, Option> name2option = new HashMap<>();
-    public final String shortName;
-    public final String longName;
+    private final String shortName;
+    private final String longName;
 
-    private static final void register(final Option o) {
+    private static void register(final Option o) {
         name2option.put(o.shortName, o);
         name2option.put(o.longName, o);
     }
 
-    /**
+    /*
      * Collect and register all options
      */
     static {
@@ -49,7 +60,7 @@ public enum Option {
      * @param shortName Short name
      * @param longName Long name, without any leading dashes or hyphens
      */
-    private Option(final char shortName, final String longName) {
+    Option(final char shortName, final String longName) {
         this.shortName = "-"+shortName;
         this.longName = "--"+longName;
     }
@@ -58,21 +69,21 @@ public enum Option {
      * Creates an lb.zipp.Option with the given long name. The short name will be the first character of the long name.
      * @param longName Long name, without any leading dashes or hyphens
      */
-    private Option(final String longName) {
+    Option(final String longName) {
         this(longName.charAt(0), longName);
     }
 
     /**
      * Creates an lb.zipp.Option, using the lower case of the declared name as the long name. The short name will be the first character of the long name.
      */
-    private Option() {
+    Option() {
         this.longName = "--"+name().toLowerCase();
         this.shortName = "-"+name().toLowerCase().charAt(0);
     }
 
     /**
      * Parses a string as either the long or short representation of an lb.zipp.Option.
-     * @param optionName
+     * @param optionName Name of the option
      * @return Parsed lb.zipp.Option
      * @throws IllegalOptionException If string argument isn't recognised as an option.
      */
@@ -91,14 +102,12 @@ public enum Option {
      * @return "-" + given char
      */
     private static String singleCharToOptionName(final int c) {
-        StringBuilder sb = new StringBuilder("-");
-        sb.append((char)c);
-        return sb.toString();
+        return "-" + (char) c;
     }
     /**
      * Explode a given single-dash option sequence (e.g. "-rp") to a stream of
      * corresponding stream of single-character options (e.g. "-r", "-p").
-     * @param optionName
+     * @param optionName Name of option
      * @return Stream of single-character optionNames
      */
     public static Stream<String> explodeSingleDashOptions(final String optionName) {

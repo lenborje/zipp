@@ -1,6 +1,9 @@
 package lb.zipp;
 
+import com.sun.management.OperatingSystemMXBean;
+import com.thedeanda.lorem.*;
 import java.io.*;
+import java.lang.management.ManagementFactory;
 import java.net.*;
 import java.nio.file.*;
 import java.util.*;
@@ -19,7 +22,9 @@ import static java.util.stream.Collectors.*;
  * @author Lennart Börjeson
  *
  */
+@SuppressWarnings({"SpellCheckingInspection"})
 public class Zipp implements Closeable {
+    private static final int availCPUs = Runtime.getRuntime().availableProcessors();
     private final FileSystem zipArchive;
     private final boolean recursive;
     private final boolean parallel;
@@ -34,9 +39,8 @@ public class Zipp implements Closeable {
      * @param archiveName name (file path) of the archive
      * @param options {@link Option}
      * @throws IOException Thrown on any underlying IO errors
-     * @throws URISyntaxException Thrown on file name syntax errors.
      */
-    private Zipp(final String archiveName, Option... options) throws IOException, URISyntaxException {
+    private Zipp(final String archiveName, Option... options) throws IOException {
         Set<Option> options1 = Collections.unmodifiableSet(Stream.of(options).collect(toSet()));
         this.recursive = options1.contains(Option.RECURSIVE);
         this.parallel = options1.contains(Option.PARALLEL);
@@ -45,11 +49,13 @@ public class Zipp implements Closeable {
 
         final Map<String, String> zipParams = new HashMap<>();
         zipParams.put("create", "true");
+//        zipParams.put("useTempFile", "true");
 
         final URI resolvedFileURI = zipPath.toAbsolutePath().toUri();
-        final URI zipURI = new URI("jar:file", resolvedFileURI.getPath(), (String) null);
+        final URI zipURI = URI.create("jar:"+resolvedFileURI);
 
         System.out.printf(getMessage(Message.working), zipURI, options1);
+
         zipArchive = FileSystems.newFileSystem(zipURI, zipParams);
     }
 
@@ -86,7 +92,9 @@ public class Zipp implements Closeable {
             final int method = (int) Files.getAttribute(zipEntryPath, "zip:method");
             final String methodName = method==0?"stored":method<8?getMessage(Message.compressed):getMessage(Message.deflated);
             logbuf.append(String.format(" (%4$s %3$.0f%%)", size, compressedSize, compression, methodName));
-            System.out.println(logbuf);
+            synchronized(System.out) {
+                System.out.println(logbuf);
+            }
         } catch (Exception e1) {
             throw new RuntimeException(String.format(" Error accessing zip archive for %s:", f), e1);
         }
@@ -109,17 +117,17 @@ public class Zipp implements Closeable {
      */
     private void addFiles(final List<String> fileNameArgs) {
 
-        final List<Path> distinctPaths =
+        final Stream<Path> distinctPaths =
                 fileNameArgs.stream()			// Process file name list
                         .map(File::new) 				// String -> File
                         .flatMap(this::filesWalk)		// Find file, or, if recursive, files
                         .map(Path::normalize) 			// Ensure no contrived paths
-                        .collect(toList());				// Collect to list
+                        .distinct();				    // Only distinct set (implies intermediate list collection)
 
         // If parallel processing requested, use parallel stream,
         // else use normal stream.
         final Stream<Path> streamOfPaths =
-                parallel ? distinctPaths.parallelStream() : distinctPaths.stream();
+                parallel ? distinctPaths.parallel() : distinctPaths;
 
         streamOfPaths.forEach(this::zipOneFile); 		// zip them all!
     }
@@ -176,6 +184,12 @@ public class Zipp implements Closeable {
      * @param args Command-line arguments.
      */
     public static void main(final String[] args) {
+        boolean test = false;
+        boolean generate;
+        long beginUserMillis, midUserMillis, endUserMillis;
+        long beginCPUNanos, midCPUNanos, endCPUNanos;
+        beginUserMillis = midUserMillis = System.currentTimeMillis();
+        beginCPUNanos = midCPUNanos = ((OperatingSystemMXBean)ManagementFactory.getOperatingSystemMXBean()).getProcessCpuTime();
         try {
             // This list will eventually contain only the file name arguments
             final LinkedList<String> fileArgs = Stream.of(args).collect(toCollection(LinkedList::new));
@@ -194,18 +208,64 @@ public class Zipp implements Closeable {
                             .toArray(Option[]::new);
 
             // Check argument count. At least one zip file and one file/dir to be added to the zip is required.
-            if (fileArgs.size()<2) {
+            if (fileArgs.isEmpty()) {
                 throw new NotEnoughArgumentsException(getMessage(Message.noargs));
             }
 
             final String zipName = fileArgs.removeFirst(); // Remove zip name argument
 
+            generate = Arrays.binarySearch(options, Option.GENERATE) >= 0;
+            test = Arrays.binarySearch(options, Option.TEST) >= 0;
+            if (generate) {
+                fileArgs.clear();
+                int numTempFiles = availCPUs * 10;
+                System.out.printf(getMessage(Message.cretemp), numTempFiles, availCPUs);
+                Lorem loremIpsum = LoremIpsum.getInstance();
+                Stream.generate(()->{
+                    try{
+                        return Files.createTempFile("ZippTest", ".txt").toFile();
+                    } catch (IOException e) {
+                        throw new UncheckedIOException(e);
+                    }
+                }).limit(numTempFiles).parallel().forEach(tmpf-> {
+                    synchronized (System.out) {
+                        System.out.print(".");
+                    }
+                    tmpf.deleteOnExit();
+                    try(FileWriter fw = new FileWriter(tmpf)) {
+                         String txt = loremIpsum.getWords(7_000_000, 10_000_000);
+                         fw.write(txt);
+                    } catch (IOException e) {
+                        throw new UncheckedIOException(e);
+                    }
+                    fileArgs.add(tmpf.getPath());
+                });
+                System.out.println(getMessage(Message.zipdone0));
+            }
+
+            // Check argument count. At least one zip file and one file/dir to be added to the zip is required.
+            if (fileArgs.isEmpty()) {
+                throw new NotEnoughArgumentsException(getMessage(Message.noargs));
+            }
+
+            beginUserMillis = midUserMillis = System.currentTimeMillis();
+            beginCPUNanos = midCPUNanos = ((OperatingSystemMXBean)ManagementFactory.getOperatingSystemMXBean()).getProcessCpuTime();
+
             try (Zipp zip = new Zipp(zipName, options)) {  // Initialise zip archive
 
                 zip.addFiles(fileArgs);	// Add files
 
-                System.out.println(getMessage(Message.zpclos));
+                if (test) {
+                    midUserMillis = System.currentTimeMillis();
+                    midCPUNanos = ((OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean()).getProcessCpuTime();
+                    long userMillis = midUserMillis - beginUserMillis;
+                    double cpuMillis = (midCPUNanos - beginCPUNanos) / 1E6;
+                    System.out.printf(getMessage(Message.tstadd), (long) cpuMillis, userMillis, cpuMillis / userMillis);
+                }
+
+                System.out.print(getMessage(Message.zpclos));
             }
+            System.out.println(getMessage(Message.zipdone0));
 
             System.out.println(getMessage(Message.zpdone));
 
@@ -217,6 +277,16 @@ public class Zipp implements Closeable {
             e.printStackTrace(System.err);
             System.exit(2);
         }
-
+        if (test) {
+            endUserMillis = System.currentTimeMillis();
+            endCPUNanos = ((OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean()).getProcessCpuTime();
+            long userMillis = endUserMillis - midUserMillis;
+            double cpuMillis = (endCPUNanos - midCPUNanos) / 1E6;
+            System.out.printf(getMessage(Message.tstclose), (long) cpuMillis, userMillis, cpuMillis / userMillis);
+            userMillis = endUserMillis - beginUserMillis;
+            cpuMillis = (endCPUNanos - beginCPUNanos) / 1E6;
+            System.out.printf(getMessage(Message.tsttotal), (long) cpuMillis, userMillis, cpuMillis / userMillis);
+            System.out.printf(getMessage(Message.tstproc), availCPUs);
+        }
     }
 }

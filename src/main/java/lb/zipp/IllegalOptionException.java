@@ -6,7 +6,7 @@ package lb.zipp;
  * @author Lennart Börjeson
  *
  */
-public class IllegalOptionException extends IllegalArgumentException {
+class IllegalOptionException extends IllegalArgumentException {
 
     private static final long serialVersionUID = 1L;
 
@@ -14,7 +14,7 @@ public class IllegalOptionException extends IllegalArgumentException {
      * Creates this exception.
      * @param s Reason message
      */
-    public IllegalOptionException(final String s) {
+    IllegalOptionException(final String s) {
         super(s);
     }
 

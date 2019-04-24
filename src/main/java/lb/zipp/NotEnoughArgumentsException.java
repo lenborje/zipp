@@ -6,7 +6,7 @@ package lb.zipp;
  * @author Lennart Börjeson
  *
  */
-public class NotEnoughArgumentsException extends RuntimeException {
+class NotEnoughArgumentsException extends RuntimeException {
 
     private static final long serialVersionUID = 1L;
 
@@ -14,7 +14,7 @@ public class NotEnoughArgumentsException extends RuntimeException {
      * Creates this exception with the given reason string.
      * @param string Reason message
      */
-    public NotEnoughArgumentsException(final String string) {
+    NotEnoughArgumentsException(final String string) {
         super(string);
     }
 
